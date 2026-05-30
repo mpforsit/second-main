@@ -26,8 +26,14 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 - **Tailwind v4** (spec doesn't pin a version) — what `create-next-app` ships today. Config uses the new CSS-first `@import "tailwindcss"` style; no `tailwind.config.js` file.
 - **Sonner** used for toasts. shadcn deprecated the older `toast` primitive in favour of `sonner`; semantics unchanged.
 
+**Deployment**
+
+- Vercel project `matthias-projects-cddf208c/second` created and linked to `github.com/mpforsit/second-main`.
+- Production deploy live at <https://second-red.vercel.app> (id `dpl_Fk3svpVhtFTzXcfiaN1usNwb9WQK`).
+- All four env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL`) set for Development, Preview, and Production.
+- Supabase project `nzdppsawfpgzpoevdeoi.supabase.co` (eu-central-1) reachable; `auth/v1/user` returns 401 for anon-only requests (correct — no session).
+
 **Open questions**
 
-- Supabase project keys not yet populated in `.env.local` — pending user creating the project in the web console and pasting URL + anon key + service-role key.
-- Vercel deployment not yet attempted — pending Supabase keys.
 - Whether to copy the Next 16 `AGENTS.md` notice into `CLAUDE.md` — keeping both files for now.
+- `vercel env add ... preview --yes` rejects `--value` without a positional branch; workaround used `""` as the "all preview branches" sentinel. May want a script wrapper if we add more env vars often.
