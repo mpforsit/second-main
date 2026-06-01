@@ -1,0 +1,2 @@
+-- No seed data — the handle_new_user trigger populates per-user rows on signup.
+-- Intentionally empty.

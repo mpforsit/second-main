@@ -26,7 +26,35 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 - **Tailwind v4** (spec doesn't pin a version) — what `create-next-app` ships today. Config uses the new CSS-first `@import "tailwindcss"` style; no `tailwind.config.js` file.
 - **Sonner** used for toasts. shadcn deprecated the older `toast` primitive in favour of `sonner`; semantics unchanged.
 
-**Deployment**
+---
+
+## Step 2 — Database migrations & RLS (2026-06-01)
+
+**Shipped**
+
+- [`supabase/migrations/0001_init.sql`](./supabase/migrations/0001_init.sql) ports the entire `docs/03-data-model.md` Phase-1 schema: extensions (pgcrypto, vector, pg_trgm), enum types, all 15 tables with their indexes (HNSW vector + GIN FTS on `chunks`), the `is_workspace_member` helper, every RLS policy, the `touch_updated_at` triggers on the eight `updated_at` tables, the `handle_new_user` trigger that auto-creates `profiles`/`workspaces`/`workspace_members`/`user_models`/`quotas` on signup, and the `search_chunks` RRF hybrid function.
+- Empty [`supabase/seed.sql`](./supabase/seed.sql) (the trigger does the work).
+- README section ([`Database migrations`](./README.md#database-migrations)) documenting both the dashboard and CLI apply paths.
+- Migration applied to the dev Supabase project via the dashboard SQL editor.
+
+**Verified via REST API**
+
+- All 15 tables present and queryable as `service_role`; `search_chunks` registered in PostgREST swagger and returns `[]` for an empty corpus.
+- Two test auth users created via the Admin API; trigger correctly inserted 5 downstream rows for each. After DELETE the cascade emptied every dependent table (back to 0 rows).
+- User A signed in with their JWT can read their own `profiles`/`workspaces` rows (count = 1 each), and any query targeting user B's rows comes back empty — RLS confirmed.
+
+**Deviations from spec**
+
+- **Explicit role grants added.** The spec section 3.3 enables RLS but never grants base privileges. With Supabase's new `sb_publishable_*` / `sb_secret_*` keys (which still map to `anon` / `service_role`), newly created tables don't auto-inherit grants. Added a "Grants for the API roles" block before the RLS section that grants `usage` on `public` to all three roles, `select` on tables to `anon`, and full access to `authenticated` + `service_role`. Without it every PostgREST call returns 42501 "permission denied".
+- **`set search_path = public` on `handle_new_user`.** Triggers on `auth.users` run under `supabase_auth_admin`, whose default search_path does not include `public`. Without it, `insert into profiles ...` fails with "relation does not exist" and GoTrue returns `500 unexpected_failure`. Also `grant execute ... to supabase_auth_admin` so the auth role can invoke the function.
+
+**Open questions**
+
+- None blocking. Storage buckets (for voice / PDFs) are not in this migration — that's Step 7/8 scope, but worth a follow-up note when we get there.
+
+---
+
+**Deployment (Step 1)**
 
 - Vercel project `matthias-projects-cddf208c/second` created and linked to `github.com/mpforsit/second-main`.
 - Production deploy live at <https://second-red.vercel.app> (id `dpl_Fk3svpVhtFTzXcfiaN1usNwb9WQK`).
