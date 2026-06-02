@@ -53,3 +53,15 @@ supabase db push                              # applies all unapplied migrations
 ```
 
 `<project-ref>` is the subdomain of your Supabase URL (e.g. `nzdppsawfpgzpoevdeoi` for `https://nzdppsawfpgzpoevdeoi.supabase.co`). The CLI prompts for the database password the first time it pushes; you set this when you created the project.
+
+## Supabase auth configuration (one-time)
+
+In the Supabase dashboard → **Authentication → URL Configuration**:
+
+- **Site URL:** the production deployment, e.g. `https://second-red.vercel.app`.
+- **Redirect URLs:** add every host that needs to receive OAuth + email-confirmation callbacks:
+  - `http://localhost:3000/api/auth/callback`
+  - `https://second-red.vercel.app/api/auth/callback`
+  - `https://*.vercel.app/api/auth/callback` (covers preview deployments)
+
+For Google OAuth (optional): in **Authentication → Providers → Google**, paste the Client ID + Client Secret from a [Google Cloud OAuth client](https://console.cloud.google.com/apis/credentials). Use `https://<project-ref>.supabase.co/auth/v1/callback` as the authorised redirect URI on the Google side.

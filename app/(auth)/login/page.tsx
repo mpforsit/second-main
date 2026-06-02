@@ -1,0 +1,140 @@
+"use client";
+
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { zodResolver } from "@/lib/forms/zod-resolver";
+import { getBrowserSupabase } from "@/lib/supabase/browser";
+
+const schema = z.object({
+  email: z.string().email("Enter a valid email"),
+  password: z.string().min(1, "Password is required"),
+});
+
+type FormValues = z.infer<typeof schema>;
+
+export default function LoginPage() {
+  // useSearchParams() forces a CSR bailout — wrapping in Suspense satisfies
+  // Next's static-export check without giving up the rest of the page.
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") ?? "/";
+  const errorParam = searchParams.get("error");
+  const [oauthLoading, setOauthLoading] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  async function onSubmit(values: FormValues) {
+    const supabase = getBrowserSupabase();
+    const { error } = await supabase.auth.signInWithPassword(values);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    router.push(next);
+    router.refresh();
+  }
+
+  async function onGoogle() {
+    setOauthLoading(true);
+    const supabase = getBrowserSupabase();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(next)}`,
+      },
+    });
+    if (error) {
+      toast.error(error.message);
+      setOauthLoading(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Sign in to Second</CardTitle>
+        <CardDescription>Welcome back.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {errorParam && (
+          <p className="text-destructive text-sm" role="alert">
+            {errorParam === "missing_code"
+              ? "Authentication failed. Please try again."
+              : decodeURIComponent(errorParam)}
+          </p>
+        )}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3" noValidate>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="email" className="text-sm font-medium">
+              Email
+            </label>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              autoFocus
+              {...register("email")}
+              aria-invalid={!!errors.email}
+            />
+            {errors.email && <p className="text-destructive text-xs">{errors.email.message}</p>}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="password" className="text-sm font-medium">
+              Password
+            </label>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              {...register("password")}
+              aria-invalid={!!errors.password}
+            />
+            {errors.password && (
+              <p className="text-destructive text-xs">{errors.password.message}</p>
+            )}
+          </div>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Signing in…" : "Sign in"}
+          </Button>
+        </form>
+
+        <div className="flex items-center gap-3">
+          <div className="border-border h-px flex-1 border-t" />
+          <span className="text-muted-foreground text-xs tracking-wide uppercase">or</span>
+          <div className="border-border h-px flex-1 border-t" />
+        </div>
+
+        <Button variant="outline" onClick={onGoogle} disabled={oauthLoading}>
+          {oauthLoading ? "Redirecting…" : "Continue with Google"}
+        </Button>
+
+        <p className="text-muted-foreground text-center text-sm">
+          Don&apos;t have an account?{" "}
+          <Link href="/signup" className="text-foreground underline-offset-4 hover:underline">
+            Sign up
+          </Link>
+        </p>
+      </CardContent>
+    </Card>
+  );
+}

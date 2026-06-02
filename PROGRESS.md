@@ -28,6 +28,33 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 
 ---
 
+## Step 3 — Auth pages and protected routes (2026-06-02)
+
+**Shipped**
+
+- [`proxy.ts`](./proxy.ts) refreshes the Supabase session every request, redirects unauthenticated traffic on any non-public path to `/login?next=<path>`, and bounces already-signed-in users away from `/login` and `/signup`.
+- Route groups: [`app/(auth)/`](./app/%28auth%29) (centered card layout for login + signup) and [`app/(app)/`](./app/%28app%29) (sidebar layout for authenticated routes — home page moved here).
+- [`app/(auth)/login/page.tsx`](<./app/(auth)/login/page.tsx>) and [`app/(auth)/signup/page.tsx`](<./app/(auth)/signup/page.tsx>) with email/password + Google OAuth, react-hook-form + zod validation, and toast-based error reporting.
+- [`app/api/auth/callback/route.ts`](./app/api/auth/callback/route.ts) handles both PKCE OAuth and email-confirmation links via `exchangeCodeForSession`.
+- [`server-actions/auth.ts`](./server-actions/auth.ts) `signOut()` server action — wired into the sidebar via `<form action={signOut}>`.
+- [`lib/hooks/use-user.ts`](./lib/hooks/use-user.ts) client hook (subscribes to `onAuthStateChange`).
+- [`components/shared/sidebar.tsx`](./components/shared/sidebar.tsx) placeholder navigation + email + theme toggle + sign-out. Real nav lands in Step 6.
+- [`app/onboarding/page.tsx`](./app/onboarding/page.tsx) placeholder so middleware-protected routing can be verified before Step 4 fills it in.
+- README addition documenting Supabase Auth URL configuration + Google OAuth setup.
+
+**Verified**
+
+- `curl -I` smoke tests pass: `/` → 307 to `/login?next=%2F`, `/login` → 200, `/onboarding` → 307 to `/login?next=%2Fonboarding`.
+- Full browser flow confirmed by user: signup → confirmation email → sign-in → home page renders with user email → sign-out returns to `/login`.
+
+**Deviations from spec**
+
+- **`middleware.ts` → `proxy.ts`.** Next 16 deprecated the `middleware` file convention in favour of `proxy`; the build emits a warning otherwise. The export changed from `middleware` to `proxy`; everything else is identical.
+- **GET, not POST, for `/api/auth/callback`.** The spec lists `POST /api/auth/callback`, but Supabase OAuth + email-confirmation links arrive via `GET ?code=…`. Implemented as `GET`.
+- **Custom zod resolver in [`lib/forms/zod-resolver.ts`](./lib/forms/zod-resolver.ts).** `@hookform/resolvers@5.4.0` lags behind `zod@4.4.3` internals and its `zodResolver` no longer type-checks. Replaced with a 15-line in-repo resolver that wraps `schema.safeParse`; the `@hookform/resolvers` dep was removed.
+
+---
+
 ## Step 2 — Database migrations & RLS (2026-06-01)
 
 **Shipped**
