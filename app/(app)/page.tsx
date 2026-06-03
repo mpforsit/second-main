@@ -1,14 +1,20 @@
-import { ThemeToggle } from "@/components/shared/theme-toggle";
+import { getServerSupabase } from "@/lib/supabase/server";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-8 p-8">
-      <div className="flex w-full max-w-3xl items-center justify-between">
-        <h1 className="text-4xl font-semibold tracking-tight">Second</h1>
-        <ThemeToggle />
-      </div>
-      <p className="text-muted-foreground text-center text-sm">
-        Phase 1 bootstrap — Next.js + Tailwind + shadcn/ui + Supabase scaffold.
+    <main className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
+      <h1 className="text-3xl font-semibold tracking-tight">Welcome to Second</h1>
+      <p className="text-muted-foreground text-sm">
+        Signed in as <span className="text-foreground font-medium">{user?.email}</span>.
+      </p>
+      <p className="text-muted-foreground max-w-md text-center text-sm">
+        The capture box, chapters, and Q&amp;A land in upcoming steps. For now, this confirms auth +
+        the (app) route group are wired up correctly.
       </p>
     </main>
   );

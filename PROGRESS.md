@@ -28,6 +28,41 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 
 ---
 
+## Step 4 — Onboarding interview (2026-06-03)
+
+**Shipped**
+
+- [`lib/anthropic/pricing.ts`](./lib/anthropic/pricing.ts) — the model price table from `docs/05-llm-operations.md` §5.2 plus a `computeCostUsd` helper that handles cached-input tokens.
+- [`lib/anthropic/client.ts`](./lib/anthropic/client.ts) — `callClaudeStream(opts)` async generator that yields `{type: 'text', text}` deltas and a final `{type: 'done', usage, full_text}`. Every call writes one `llm_call_logs` row (fire-and-forget) with input/output/cached token counts, `cost_usd`, `latency_ms`, and `succeeded`. Quota enforcement is deferred to Step 14.
+- [`lib/supabase/service.ts`](./lib/supabase/service.ts) — service-role Supabase client used only for spec-designated "server-only" writes (`llm_call_logs` for now; `chunks`, `quotas` updates in later steps).
+- [`lib/prompts/onboarding.ts`](./lib/prompts/onboarding.ts) — verbatim system prompt from §5.4.1 with a version constant.
+- [`app/api/onboarding/chat/route.ts`](./app/api/onboarding/chat/route.ts) — POST streaming SSE handler. Watches the accumulated text for `<onboarding_complete>…</onboarding_complete>`, holds back the last 21 chars to avoid leaking a partial marker into the transcript, and emits `{type: 'complete', user_model, suggested_chapters}` once the structured block is parsed.
+- [`server-actions/user-model.ts`](./server-actions/user-model.ts) `completeOnboarding(payload)` — zod-validates the parsed payload, writes `user_models.model` + `onboarding_completed_at`, inserts the suggested chapters in order, redirects to `/`.
+- [`app/onboarding/page.tsx`](./app/onboarding/page.tsx) — server page that redirects already-onboarded users to `/`, otherwise renders [`<OnboardingChat>`](./components/onboarding/onboarding-chat.tsx).
+- [`<OnboardingChat>`](./components/onboarding/onboarding-chat.tsx) — full-screen chat with kickoff turn, step counter, streaming bubbles, and a confirmation card showing the suggested chapters + extracted projects/people before the user clicks "Looks good, let's go".
+- Onboarding gate in [`app/(app)/layout.tsx`](<./app/(app)/layout.tsx>): every authenticated request to an (app) route checks `user_models.onboarding_completed_at` and redirects to `/onboarding` if null.
+- [`types/schemas.ts`](./types/schemas.ts) — first slice of the shared zod schemas from `docs/04-api-spec.md` §4.1 (`UserModelSchema`, `ChapterInputSchema`).
+
+**Verified**
+
+- Fresh user with a pre-existing pre-onboarding `user_models` row → lands on `/onboarding` after sign-in.
+- Conversation runs token-by-token; the structured block is captured server-side and never leaks into the transcript.
+- Confirmation card shows the actual proposed chapters + extracted projects/people.
+- After confirm: `user_models.model` has 5 projects + 1 person, `onboarding_completed_at` is set, 8 starter chapters inserted (within the spec's 4–8 range), and 8 `llm_call_logs` rows are present totalling $0.0349 across the interview.
+- Refreshing the app now lands on `/` rather than `/onboarding`.
+
+**Deviations from spec**
+
+- **`completeOnboarding` takes the structured payload, not the raw message list.** Spec lists `completeOnboarding(messages: Message[])`. We instead pass the `{user_model, suggested_chapters}` parsed by the SSE `complete` event, zod-validate it server-side, and write it. Less round-trip; the conversation history is still recoverable from `llm_call_logs` if needed.
+- **`callClaudeStream` doesn't enforce quotas yet.** The spec wrapper sketch (§5.2) lists quota-check-before-call + atomic increment after. That's Step 14's scope per the build plan, so we only log for now.
+
+**Open items / observations**
+
+- Average onboarding was 8 LLM calls and $0.035 — higher than the spec's ~$0.02 estimate. The model occasionally asks an extra clarifying turn before proposing chapters. Worth tightening the prompt in a future revision if cost becomes a concern.
+- The marker-detection safe-tail window is hard-coded to `MARKER_OPEN.length` (21 chars). Fine for the current marker; if the marker string ever changes, the constant tracks it automatically.
+
+---
+
 ## Step 3 — Auth pages and protected routes (2026-06-02)
 
 **Shipped**
