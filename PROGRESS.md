@@ -28,6 +28,47 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 
 ---
 
+## Step 5 — Capture pipeline foundation (text only) (2026-06-10)
+
+**Shipped**
+
+- [`lib/openai/{client,pricing,embeddings}.ts`](./lib/openai) — singleton OpenAI client and `embedBatch(texts, opts)` that batches at 100/call against `text-embedding-3-small` (1536 dims), with a `llm_call_logs` row written per call.
+- [`lib/chunking/{tokens,chunker}.ts`](./lib/chunking) — `js-tiktoken`-based token counting and a paragraph-first → sentence → word fallback chunker (target 600 tokens, max 800, 100-token overlap) per `docs/05-llm-operations.md` §5.7.
+- [`lib/prompts/classify-chapter.ts`](./lib/prompts/classify-chapter.ts) — §5.4.2 system prompt verbatim plus a `renderClassifyUserPrompt` template.
+- [`lib/anthropic/client.ts`](./lib/anthropic/client.ts) — added a non-streaming `callClaude()` companion to `callClaudeStream` so background jobs can do single-shot completions with the same cost-logging discipline.
+- [`lib/inngest/client.ts`](./lib/inngest/client.ts) — singleton `Inngest` client and a typed `AtomCreatedEvent` via `eventType()` + `staticSchema()` (Inngest 4.5 dropped `EventSchemas`).
+- [`inngest/functions/process-atom.ts`](./inngest/functions/process-atom.ts) — the 8-step pipeline: load → text passthrough (URL/PDF/voice extract no-op until Steps 7–8) → chunk → embed → save-chunks → classify (Haiku, JSON, one retry) → record-suggestion + assign primary_chapter_id → mark-ready. Link proposal step is a no-op per the build-plan deferral to Step 12.
+- [`app/api/inngest/route.ts`](./app/api/inngest/route.ts) — Next.js serve handler exporting GET/POST/PUT.
+- [`server-actions/atoms.ts`](./server-actions/atoms.ts) `capture(input)` — zod-validates, inserts `sources` + `atoms` (+ optional `intents`), `inngest.send('atom.created', …)`, returns `{atom_id}`. Cleanly surfaces the `(workspace_id, content_hash)` unique-violation as `duplicate_content`.
+- [`<CaptureBox>`](./components/capture/capture-box.tsx) — text-mode active; Voice + Upload tabs scaffolded as disabled.
+- [`<RightRail>`](./components/shared/right-rail.tsx) + [`<RecentAtoms>`](./components/shared/recent-atoms.tsx) — right-rail container with a polling list (3 s tick) that flips Processing → Ready and labels the assigned chapter.
+- [`app/(app)/layout.tsx`](<./app/(app)/layout.tsx>) gained the right rail beside the main content.
+- [`proxy.ts`](./proxy.ts) public-paths list now includes `/api/inngest` so cloud/dev-server pings aren't bounced to `/login`.
+- `package.json` gained `pnpm inngest:dev` (`pnpm dlx inngest-cli@latest dev`) and `INNGEST_DEV=1` is documented in [`.env.local.example`](./.env.local.example) for local dev (production uses real signing keys instead).
+
+**Verified end-to-end with the local Inngest dev server**
+
+- Paste of text → toast → atom appears as "Processing…" in the right rail.
+- Within ~3 s the pill flips to "Ready" and the chapter label appears.
+- Service-role REST queries confirm: `atoms.status='ready'`, `primary_chapter_id` set, `content_hash` set; one `chunks` row with `embedding_dim=1536`; one `suggestions` row of `type='chapter_assignment'` with the LLM's confidence/reasoning preserved; `llm_call_logs` rows for both `embed.chunk` (openai) and `capture.classify` (anthropic, claude-haiku-4-5).
+- Inngest dashboard at `localhost:8288/runs` shows every step green.
+
+**Deviations from spec**
+
+- **`@dqbd/tiktoken` → `js-tiktoken`.** Spec named a now-abandoned package; same `cl100k_base` encoding, pure-JS, maintained.
+- **Realtime broadcast (`atom.ready`) skipped.** Build plan explicitly allows "poll or refresh for now"; `RecentAtoms` polls every 3 s. Realtime can swap in later without UI changes.
+- **`propose_links` step is a no-op.** Per the build plan that lands in Step 12 along with the link-resolution UI.
+- **Quota enforcement still deferred** to Step 14, same reasoning as Step 4.
+- **Permissive RLS policy added for `sources`.** Spec §3.3 omits this table; Supabase enables RLS by default, so `capture()` couldn't insert without a policy. Granted `for all to authenticated`; user-facing access is gated by `atoms` RLS through the FK.
+- **Inngest API changed.** `EventSchemas` is gone; switched to `eventType('atom.created', { schema: staticSchema<…>() })` and `createFunction({ id, triggers: [event], retries }, handler)`.
+
+**Open items**
+
+- Production needs `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` from Inngest Cloud + an `app sync` for our deployed `/api/inngest`. Tracking as a next step.
+- Cost reporting precision: `llm_call_logs.cost_usd` is `numeric(10,6)`, which rounds tiny embed calls to $0.000000. Acceptable until per-user cost rollups need accuracy below 0.0001¢.
+
+---
+
 ## Step 4 — Onboarding interview (2026-06-03)
 
 **Shipped**

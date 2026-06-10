@@ -346,6 +346,16 @@ create policy "chapters_member_select" on chapters
 create policy "chapters_member_modify" on chapters
   for all using (is_workspace_member(workspace_id));
 
+-- sources
+-- The spec §3.3 doesn't list a policy for sources, but Supabase enables RLS
+-- on every new table by default. Source rows hold provenance metadata
+-- (URL, storage path, extracted title) referenced by atoms, and atom RLS
+-- already gates what a user can see — so a permissive authenticated policy
+-- is safe and lets capture() insert source rows.
+alter table sources enable row level security;
+create policy "sources_authenticated_all" on sources
+  for all to authenticated using (true) with check (true);
+
 -- atoms
 alter table atoms enable row level security;
 create policy "atoms_member_select" on atoms

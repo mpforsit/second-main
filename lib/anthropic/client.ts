@@ -125,6 +125,79 @@ export async function* callClaudeStream(opts: CallOpts): AsyncGenerator<ClaudeSt
   }
 }
 
+/**
+ * Non-streaming Claude call. Same logging discipline as the streaming
+ * variant. Returns the assistant's full text + usage. Throws on API error.
+ */
+export async function callClaude(opts: CallOpts): Promise<{ text: string; usage: CallUsage }> {
+  const start = performance.now();
+  const client = getClient();
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cachedInputTokens = 0;
+  let succeeded = true;
+  let errorMessage: string | null = null;
+  let text = "";
+
+  try {
+    const res = await client.messages.create({
+      model: opts.model,
+      system: opts.system,
+      messages: opts.messages,
+      max_tokens: opts.max_tokens,
+    });
+    inputTokens = res.usage.input_tokens ?? 0;
+    outputTokens = res.usage.output_tokens ?? 0;
+    cachedInputTokens = res.usage.cache_read_input_tokens ?? 0;
+    text = res.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+  } catch (err) {
+    succeeded = false;
+    errorMessage = err instanceof Error ? err.message : String(err);
+    throw err;
+  } finally {
+    const latency_ms = Math.round(performance.now() - start);
+    const cost_usd = computeCostUsd(opts.model, {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cached_input_tokens: cachedInputTokens,
+    });
+
+    void logCall({
+      user_id: opts.user_id,
+      workspace_id: opts.workspace_id,
+      use_case: opts.use_case,
+      provider: "anthropic",
+      model: opts.model,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cached_input_tokens: cachedInputTokens,
+      cost_usd,
+      latency_ms,
+      succeeded,
+      error: errorMessage,
+    });
+  }
+
+  return {
+    text,
+    usage: {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cached_input_tokens: cachedInputTokens,
+      cost_usd: computeCostUsd(opts.model, {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        cached_input_tokens: cachedInputTokens,
+      }),
+      latency_ms: 0, // recomputed above; not exposed to caller
+    },
+  };
+}
+
 interface LogRow {
   user_id: string;
   workspace_id?: string;

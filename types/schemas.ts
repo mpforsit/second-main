@@ -3,6 +3,42 @@
 
 import { z } from "zod";
 
+export const IntentActionEnum = z.enum([
+  "read",
+  "reach_out",
+  "use_in",
+  "research",
+  "review",
+  "share",
+  "decide",
+  "other",
+]);
+export type IntentAction = z.infer<typeof IntentActionEnum>;
+
+export const CaptureInputSchema = z
+  .object({
+    text: z.string().min(1).max(50_000).optional(),
+    url: z.string().url().optional(),
+    uploadStoragePath: z.string().optional(),
+    voiceStoragePath: z.string().optional(),
+
+    comment: z.string().max(2000).optional(),
+    intent: z
+      .object({
+        text: z.string().min(1).max(500),
+        action_type: IntentActionEnum,
+        due_at: z.string().datetime().optional(),
+      })
+      .optional(),
+
+    chapter_id: z.string().uuid().optional(),
+  })
+  .refine(
+    (d) => [d.text, d.url, d.uploadStoragePath, d.voiceStoragePath].filter(Boolean).length === 1,
+    { message: "Exactly one content source must be provided" },
+  );
+export type CaptureInput = z.infer<typeof CaptureInputSchema>;
+
 export const UserModelSchema = z.object({
   projects: z
     .array(

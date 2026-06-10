@@ -2,7 +2,9 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 // Public paths that DON'T require an authenticated user.
-const PUBLIC_PATHS = ["/login", "/signup", "/api/auth"];
+// /api/inngest is hit by the Inngest cloud + local dev server; their
+// requests carry no user session and are authenticated by signing keys.
+const PUBLIC_PATHS = ["/login", "/signup", "/api/auth", "/api/inngest"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
