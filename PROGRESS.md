@@ -28,6 +28,35 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 
 ---
 
+## Step 6 — Chapter & atom browse UI (2026-06-11)
+
+**Shipped**
+
+- [`server-actions/chapters.ts`](./server-actions/chapters.ts) — `createChapter`, `renameChapter`, `archiveChapter`. Each validates with zod, scopes the write to the user's personal workspace via RLS, and `revalidatePath("/", "layout")` so the sidebar re-fetches.
+- Route group split: [`app/(app)/(with-rail)/`](<./app/(app)/(with-rail)>) mounts `<RightRail>`; the bare [`app/(app)/`](<./app/(app)>) layout drops it. The home page moved into `(with-rail)`; `/atoms/[atomId]` lives directly under `(app)` so its detail view fills the width.
+- [`<Sidebar>`](./components/shared/sidebar.tsx) now renders the actual chapter list (active chapters only, ordered by `sort_order`) with a `+` trigger that opens [`<NewChapterDialog>`](./components/chapter/new-chapter-dialog.tsx).
+- [`/chapters`](<./app/(app)/(with-rail)/chapters/page.tsx>) — all-chapters list with atom counts via nested PostgREST select.
+- [`/chapters/[chapterId]`](<./app/(app)/(with-rail)/chapters/[chapterId]/page.tsx>) — chronological feed of `<AtomCard>` (status=ready, newest first) with [`<ChapterHeader>`](./components/chapter/chapter-header.tsx) doing inline rename and kebab → Archive.
+- [`<AtomCard>`](./components/atom/atom-card.tsx) — source icon, derived title (extracted title or first non-empty line), one-line snippet, chapter pill, capture-comment indicator, relative time.
+- [`/atoms/[atomId]`](<./app/(app)/atoms/[atomId]/page.tsx>) renders [`<AtomDetail>`](./components/atom/atom-detail.tsx): back-link to chapter, header (title + source + captured-at), serif content body, capture-note block when present, plus a stub explaining that comments/intents/related are coming.
+- Empty states on `/chapters`, the chapter feed, and the sidebar chapter list.
+
+**Verified**
+
+- Sidebar lists all active chapters; clicking each lands on its feed.
+- Atom card click → detail page renders; right rail is gone there only.
+- Inline rename ✓; archive removes the chapter from sidebar + `/chapters` (`archived_at` is set, row preserved).
+- `+ New chapter` dialog creates a chapter that immediately appears in the sidebar.
+- Build / typecheck / lint clean.
+
+**Deviations from spec**
+
+- **Right rail collapses → fully hidden** on `/atoms/[atomId]`. Spec says "collapses"; for MVP "hidden via route group" is simpler than a partially-collapsed sidebar, and is what the build plan permits.
+- **No filter bar on chapter feed yet.** Spec §6.4 mentions filter by intent / date; deferred until intents land in Step 9 (filter by intent type is meaningless without intents).
+- **No chapter-change dropdown on atom detail.** Spec §6.4 §1 lists "primary chapter (clickable, can be changed via dropdown)"; we show the chapter as a link to its feed but don't yet allow reassigning. That's small follow-up — flagging here.
+
+---
+
 ## Step 5 — Capture pipeline foundation (text only) (2026-06-10)
 
 **Shipped**

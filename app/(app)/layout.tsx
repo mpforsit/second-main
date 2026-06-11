@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 
-import { RightRail } from "@/components/shared/right-rail";
 import { Sidebar } from "@/components/shared/sidebar";
 import { getServerSupabase } from "@/lib/supabase/server";
 
@@ -10,8 +9,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Middleware already redirects unauthenticated users, but if for any reason
-  // we land here without a session don't try to query.
   if (user) {
     const { data: userModel } = await supabase
       .from("user_models")
@@ -24,11 +21,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
   }
 
+  // The right rail is mounted by app/(app)/(with-rail)/layout.tsx so pages
+  // like /atoms/[id] can opt out by living under app/(app)/ directly.
   return (
     <div className="flex min-h-svh flex-1">
       <Sidebar />
-      <div className="flex flex-1 flex-col">{children}</div>
-      <RightRail />
+      {children}
     </div>
   );
 }

@@ -1,9 +1,11 @@
 import { LogOutIcon } from "lucide-react";
+import Link from "next/link";
 
-import { signOut } from "@/server-actions/auth";
+import { NewChapterDialog } from "@/components/chapter/new-chapter-dialog";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { signOut } from "@/server-actions/auth";
 
 export async function Sidebar() {
   const supabase = await getServerSupabase();
@@ -11,20 +13,60 @@ export async function Sidebar() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  return (
-    <aside className="bg-card flex h-svh w-56 shrink-0 flex-col border-r p-4">
-      <div className="text-base font-semibold tracking-tight">Second</div>
+  // RLS scopes this to the user's workspaces; we don't need a workspace_id filter.
+  const { data: chapters } = await supabase
+    .from("chapters")
+    .select("id, name")
+    .is("archived_at", null)
+    .order("sort_order");
 
-      <nav className="text-muted-foreground mt-6 flex flex-1 flex-col gap-1 text-sm">
-        {/* Real nav lands in Step 6 (chapters/search/ask/etc.). */}
-        <span className="text-muted-foreground/70 px-2 py-1 text-xs tracking-wide uppercase">
-          Coming in Step 6
-        </span>
-        <span className="px-2 py-1.5">Chapters</span>
-        <span className="px-2 py-1.5">Ask</span>
-        <span className="px-2 py-1.5">Search</span>
-        <span className="px-2 py-1.5">User model</span>
-      </nav>
+  return (
+    <aside className="bg-card flex h-svh w-60 shrink-0 flex-col border-r p-4">
+      <Link href="/" className="text-base font-semibold tracking-tight">
+        Second
+      </Link>
+
+      <div className="mt-6 flex flex-1 flex-col gap-4 overflow-y-auto">
+        <section>
+          <div className="text-muted-foreground mb-1 flex items-center justify-between px-2">
+            <Link
+              href="/chapters"
+              className="text-xs font-medium tracking-wide uppercase hover:underline"
+            >
+              Chapters
+            </Link>
+            <NewChapterDialog />
+          </div>
+          <ul className="flex flex-col">
+            {(chapters ?? []).map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/chapters/${c.id}`}
+                  className="hover:bg-muted block truncate rounded-md px-2 py-1.5 text-sm"
+                  title={c.name}
+                >
+                  {c.name}
+                </Link>
+              </li>
+            ))}
+            {chapters?.length === 0 && (
+              <li className="text-muted-foreground px-2 py-1 text-xs">No chapters yet.</li>
+            )}
+          </ul>
+        </section>
+
+        <section>
+          <p className="text-muted-foreground/70 px-2 text-xs tracking-wide uppercase">
+            Coming soon
+          </p>
+          <ul className="text-muted-foreground flex flex-col text-sm">
+            <li className="px-2 py-1.5">Ask</li>
+            <li className="px-2 py-1.5">Search</li>
+            <li className="px-2 py-1.5">User model</li>
+            <li className="px-2 py-1.5">Settings</li>
+          </ul>
+        </section>
+      </div>
 
       <div className="flex flex-col gap-2">
         {user?.email && (
