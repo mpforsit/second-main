@@ -62,9 +62,15 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 - **Permissive RLS policy added for `sources`.** Spec §3.3 omits this table; Supabase enables RLS by default, so `capture()` couldn't insert without a policy. Granted `for all to authenticated`; user-facing access is gated by `atoms` RLS through the FK.
 - **Inngest API changed.** `EventSchemas` is gone; switched to `eventType('atom.created', { schema: staticSchema<…>() })` and `createFunction({ id, triggers: [event], retries }, handler)`.
 
+**Production verified (same day, 2026-06-11)**
+
+- `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` pushed to all three Vercel envs.
+- App synced in Inngest Cloud → <https://second-red.vercel.app/api/inngest>.
+- Live capture on production confirms the same pipeline runs end-to-end: atom flipped to `ready` in ~10 s, chunk has `embedding_dim=1536`, suggestion row written with `confidence=0.92`, both `embed.chunk` and `capture.classify` `llm_call_logs` rows present and `succeeded=true`.
+
 **Open items**
 
-- Production needs `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` from Inngest Cloud + an `app sync` for our deployed `/api/inngest`. Tracking as a next step.
+- Preview deployments share the production Inngest signing key, so a preview's events go into the prod Inngest environment. Acceptable for MVP; worth splitting into a separate Inngest env if preview traffic ever picks up.
 - Cost reporting precision: `llm_call_logs.cost_usd` is `numeric(10,6)`, which rounds tiny embed calls to $0.000000. Acceptable until per-user cost rollups need accuracy below 0.0001¢.
 
 ---
