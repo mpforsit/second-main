@@ -36,11 +36,7 @@ export async function capture(rawInput: unknown): Promise<Result<{ atom_id: stri
 
   // Quota check — Step 14 wires the enforcement.
 
-  // 5. Create the source row. (URL/PDF/voice branches add their metadata
-  //    when those modes get implemented in later steps.)
-  const sourceType: CaptureInput["text"] extends string ? "paste" : "paste" = "paste";
-  void sourceType;
-
+  // 5. Create the source row.
   let source_type: "paste" | "url" | "upload" | "voice" = "paste";
   let original_url: string | null = null;
   let storage_path: string | null = null;
@@ -115,4 +111,34 @@ export async function capture(rawInput: unknown): Promise<Result<{ atom_id: stri
 
 function sha256(text: string): string {
   return crypto.createHash("sha256").update(text).digest("hex");
+}
+
+/**
+ * Resets a failed atom and re-fires the atom.created event. Only the
+ * creator can retry their own atom (RLS handles the scoping).
+ */
+export async function retryAtom(atom_id: string): Promise<Result<void>> {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauthorized" };
+
+  const { data: atom, error } = await supabase
+    .from("atoms")
+    .update({ status: "processing", processing_error: null })
+    .eq("id", atom_id)
+    .eq("created_by", user.id)
+    .select("id, workspace_id")
+    .maybeSingle();
+  if (error || !atom) {
+    return { ok: false, error: error?.message ?? "atom_not_found" };
+  }
+
+  await inngest.send({
+    name: "atom.created",
+    data: { atom_id: atom.id, workspace_id: atom.workspace_id, user_id: user.id },
+  });
+
+  return { ok: true, data: undefined };
 }

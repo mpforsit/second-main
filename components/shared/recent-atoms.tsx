@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { getBrowserSupabase } from "@/lib/supabase/browser";
@@ -73,15 +74,28 @@ export function RecentAtoms() {
   return (
     <ul className="flex flex-col gap-2">
       {atoms.map((a) => (
-        <li key={a.id} className="border-border flex flex-col gap-1 rounded-md border p-2">
-          <div className="flex items-center justify-between gap-2">
-            <StatusPill status={a.status} />
-            <span className="text-muted-foreground text-[10px]">{relativeTime(a.created_at)}</span>
-          </div>
-          <p className="line-clamp-2 text-xs">{firstLine(a.content)}</p>
-          {a.chapter_name && (
-            <span className="text-muted-foreground text-[10px]">→ {a.chapter_name}</span>
-          )}
+        <li key={a.id}>
+          <Link
+            href={`/atoms/${a.id}`}
+            className="border-border hover:bg-muted/40 flex flex-col gap-1 rounded-md border p-2 transition-colors"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <StatusPill status={a.status} />
+              <span className="text-muted-foreground text-[10px]">
+                {relativeTime(a.created_at)}
+              </span>
+            </div>
+            <p className="line-clamp-2 text-xs">
+              {firstLine(a.content) || (
+                <span className="text-muted-foreground italic">
+                  {a.status === "failed" ? "(extraction failed)" : "(no content yet)"}
+                </span>
+              )}
+            </p>
+            {a.chapter_name && (
+              <span className="text-muted-foreground text-[10px]">→ {a.chapter_name}</span>
+            )}
+          </Link>
         </li>
       ))}
     </ul>

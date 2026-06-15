@@ -20,7 +20,7 @@ export default async function AtomDetailPage({ params }: { params: Promise<{ ato
   const { data, error } = await supabase
     .from("atoms")
     .select(
-      "id, content, capture_comment, captured_at, sources!inner(type, original_url, extracted_title), chapters!primary_chapter_id(id, name)",
+      "id, content, capture_comment, captured_at, status, processing_error, sources!inner(type, original_url, extracted_title), chapters!primary_chapter_id(id, name)",
     )
     .eq("id", atomId)
     .maybeSingle();
@@ -40,6 +40,8 @@ export default async function AtomDetailPage({ params }: { params: Promise<{ ato
       content={data.content}
       capture_comment={data.capture_comment}
       captured_at={data.captured_at}
+      status={data.status}
+      processing_error={data.processing_error}
       source_type={source?.type ?? "paste"}
       source_url={source?.original_url ?? null}
       source_title={source?.extracted_title ?? null}

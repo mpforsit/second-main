@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeftIcon, ExternalLinkIcon } from "lucide-react";
 
+import { RetryButton } from "@/components/atom/retry-button";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -8,6 +9,8 @@ interface Props {
   content: string;
   capture_comment: string | null;
   captured_at: string;
+  status: "processing" | "ready" | "failed";
+  processing_error: string | null;
   source_type: "paste" | "url" | "upload" | "voice" | "connector";
   source_url: string | null;
   source_title: string | null;
@@ -64,9 +67,30 @@ export function AtomDetail(props: Props) {
         </div>
       </header>
 
-      <article className="font-serif text-base leading-7 whitespace-pre-wrap">
-        {props.content}
-      </article>
+      {props.status === "processing" && (
+        <section className="border-border bg-muted/30 text-muted-foreground rounded-md border p-4 text-xs">
+          Processing… The pipeline is extracting, chunking, embedding, and classifying. This usually
+          takes 5–15 seconds. Refresh in a moment.
+        </section>
+      )}
+
+      {props.status === "failed" && (
+        <section className="border-destructive/40 bg-destructive/5 text-destructive-foreground flex flex-col gap-3 rounded-md border p-4 text-sm">
+          <div>
+            <p className="text-destructive font-medium">Processing failed.</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              {props.processing_error ?? "Unknown error"}
+            </p>
+          </div>
+          <RetryButton atomId={props.id} />
+        </section>
+      )}
+
+      {props.content && (
+        <article className="font-serif text-base leading-7 whitespace-pre-wrap">
+          {props.content}
+        </article>
+      )}
 
       {props.capture_comment && (
         <section className="border-border flex flex-col gap-2 rounded-md border p-4">

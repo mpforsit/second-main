@@ -28,6 +28,42 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 
 ---
 
+## Step 7 — URL capture with extraction (2026-06-15)
+
+**Shipped**
+
+- [`supabase/migrations/0002_storage.sql`](./supabase/migrations/0002_storage.sql) creates the `uploads` Storage bucket (10 MB cap, `application/pdf` allowlist) plus per-user RLS policies on `storage.objects` (path convention `{user_id}/{uuid}.pdf`).
+- [`lib/extraction/url.ts`](./lib/extraction/url.ts) — `extractArticleFromUrl(url)` fetches with a 15 s timeout, a real-browser-ish User-Agent, follows redirects, asserts an HTML content-type, then parses with `@mozilla/readability` + `jsdom`. Returns title / byline / plain text / excerpt / resolved URL.
+- [`lib/extraction/pdf.ts`](./lib/extraction/pdf.ts) — `extractPdfFromStorage(path)` downloads via service-role and runs the new pdf-parse 2.x `PDFParse` class API (text + Info dictionary).
+- [`/api/capture/upload-signed-url`](./app/api/capture/upload-signed-url/route.ts) — POST returns `{ storage_path, signed_url, token, bucket, expires_at }`. The browser then uses `supabase.storage.from(bucket).uploadToSignedUrl(path, token, file)` for a direct PUT.
+- [`<CaptureBox>`](./components/capture/capture-box.tsx) — text mode now detects a single URL and switches the submit affordance to **"Fetch article"** with a small hostname banner. **Upload** tab is live with drag-and-drop + click-to-pick PDF (≤10 MB, type-checked), uploads then calls `capture({uploadStoragePath})`.
+- [`inngest/functions/process-atom.ts`](./inngest/functions/process-atom.ts) — `extract` step now routes by `source.type`: `url` → Readability, `upload` → pdf-parse, text → passthrough. A new `save-content` step writes the extracted text + a recomputed `content_hash` and stamps `sources.extracted_title` / `extracted_author` from the extractor. The whole function is wrapped in a try/catch that updates `atoms.status='failed'` with `processing_error` before re-throwing — Inngest's `retries: 3` still applies.
+- [`retryAtom(atom_id)`](./server-actions/atoms.ts) server action resets status + clears the error and re-fires `atom.created`. Wired into [`<RetryButton>`](./components/atom/retry-button.tsx) which appears in the [`<AtomDetail>`](./components/atom/atom-detail.tsx) failure block.
+- AtomDetail surfaces `processing` and `failed` states (failed shows error message + Retry).
+- [`<RecentAtoms>`](./components/shared/recent-atoms.tsx) items are now `<Link>`s to `/atoms/[id]` — important because failed atoms have no chapter, so the right rail is the only entry point to their Retry button.
+- [`next.config.ts`](./next.config.ts) externalizes `pdf-parse` + `pdfjs-dist` from the server bundle so the pdf.js "fake worker" can resolve `pdf.worker.mjs` on the `node_modules` filesystem.
+
+**Verified locally**
+
+- Real article URL → atom Ready with extracted title + body, original URL preserved.
+- Paywalled / non-HTML URL → atom flips to `failed` with a readable error message.
+- 1-page PDF upload → uploaded via signed URL → extracted text appears in atom content.
+- Failed atom → click from right rail → Retry button on detail page re-fires the pipeline.
+- Build / typecheck / lint clean.
+
+**Deviations from spec**
+
+- **`pdf-parse` is on 2.x with the new `PDFParse` class API** (not the 1.x default export). Same library; just modernized.
+- **Externalized `pdf-parse` + `pdfjs-dist`** via `next.config.ts` — pdf.js's worker file isn't bundle-friendly. Cheap and stable.
+- **Failed atoms aren't surfaced in chapter feeds** — they have `primary_chapter_id = null` (classification never ran), so by construction they can't belong to a chapter. The right-rail recent list is their entry point; the "(extraction failed)" placeholder makes them obvious.
+
+**Open items**
+
+- The "Fetch article" UI inside the Text tab covers the spec's "single URL → URL submit" requirement, but we don't yet show a pre-fetch preview. Real previewing (title + thumbnail before submit) can land if the UX warrants it.
+- Inngest dev-server polls flood the dev log. Not blocking, but worth tightening with a log filter eventually.
+
+---
+
 ## Step 6 — Chapter & atom browse UI (2026-06-11)
 
 **Shipped**
