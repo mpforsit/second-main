@@ -6,6 +6,7 @@ import { extractPdfFromStorage } from "@/lib/extraction/pdf";
 import { extractArticleFromUrl } from "@/lib/extraction/url";
 import { AtomCreatedEvent, inngest } from "@/lib/inngest/client";
 import { embedBatch } from "@/lib/openai/embeddings";
+import { transcribeFromStorage } from "@/lib/openai/whisper";
 import {
   CLASSIFY_CHAPTER_SYSTEM_PROMPT,
   renderClassifyUserPrompt,
@@ -76,7 +77,22 @@ export const processAtom = inngest.createFunction(
             extracted_author: pdf.author,
           };
         }
-        // text / paste / voice (voice still no-op until Step 8)
+        if (atom.source_type === "voice") {
+          if (!atom.storage_path) throw new Error("extract: voice source missing storage_path");
+          const audio = await transcribeFromStorage(atom.storage_path, {
+            user_id,
+            workspace_id,
+          });
+          if (!audio.text) {
+            throw new Error("extract: voice memo produced no text (silence?)");
+          }
+          return {
+            content: audio.text,
+            extracted_title: null as string | null,
+            extracted_author: null as string | null,
+          };
+        }
+        // text / paste
         return {
           content: atom.content,
           extracted_title: null as string | null,

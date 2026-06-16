@@ -14,6 +14,7 @@ interface Props {
   source_type: "paste" | "url" | "upload" | "voice" | "connector";
   source_url: string | null;
   source_title: string | null;
+  audio_url: string | null;
   chapter: { id: string; name: string } | null;
 }
 
@@ -83,6 +84,17 @@ export function AtomDetail(props: Props) {
             </p>
           </div>
           <RetryButton atomId={props.id} />
+        </section>
+      )}
+
+      {props.source_type === "voice" && props.audio_url && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+            Recording
+          </h2>
+          <audio controls preload="metadata" src={props.audio_url} className="w-full">
+            Your browser does not support audio playback.
+          </audio>
         </section>
       )}
 

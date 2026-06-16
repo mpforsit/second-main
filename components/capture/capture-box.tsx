@@ -1,8 +1,8 @@
 "use client";
 
-import { LinkIcon, UploadIcon } from "lucide-react";
+import { LinkIcon, MicIcon, SquareIcon, UploadIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -31,15 +31,16 @@ export function CaptureBox() {
       <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="text">Text</TabsTrigger>
         <TabsTrigger value="upload">Upload</TabsTrigger>
-        <TabsTrigger value="voice" disabled>
-          Voice
-        </TabsTrigger>
+        <TabsTrigger value="voice">Voice</TabsTrigger>
       </TabsList>
       <TabsContent value="text" className="pt-3">
         <TextCapture />
       </TabsContent>
       <TabsContent value="upload" className="pt-3">
         <UploadCapture />
+      </TabsContent>
+      <TabsContent value="voice" className="pt-3">
+        <VoiceCapture />
       </TabsContent>
     </Tabs>
   );
@@ -226,4 +227,200 @@ function UploadCapture() {
       </Button>
     </form>
   );
+}
+
+function pickAudioMime(): string {
+  // Prefer audio/webm (Chrome, Firefox, Edge). Safari only offers audio/mp4.
+  if (typeof MediaRecorder === "undefined") return "audio/webm";
+  if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) return "audio/webm;codecs=opus";
+  if (MediaRecorder.isTypeSupported("audio/webm")) return "audio/webm";
+  if (MediaRecorder.isTypeSupported("audio/mp4")) return "audio/mp4";
+  return "";
+}
+
+function extForMime(mime: string): "webm" | "mp4" {
+  if (mime.startsWith("audio/mp4")) return "mp4";
+  return "webm";
+}
+
+function VoiceCapture() {
+  const router = useRouter();
+  const [state, setState] = useState<"idle" | "recording" | "recorded" | "submitting">("idle");
+  const [elapsed, setElapsed] = useState(0);
+  const [blob, setBlob] = useState<{ data: Blob; url: string; ext: "webm" | "mp4" } | null>(null);
+  const [comment, setComment] = useState("");
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const tickRef = useRef<number | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    return () => {
+      // Clean up any leftover stream when the component unmounts.
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (blob?.url) URL.revokeObjectURL(blob.url);
+      if (tickRef.current !== null) window.clearInterval(tickRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function startRecording() {
+    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      toast.error("Microphone is not available in this browser");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = pickAudioMime();
+      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      recorderRef.current = rec;
+      chunksRef.current = [];
+
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      rec.onstop = () => {
+        const actualMime = rec.mimeType || mime || "audio/webm";
+        const ext = extForMime(actualMime);
+        const data = new Blob(chunksRef.current, { type: actualMime });
+        const url = URL.createObjectURL(data);
+        if (blob?.url) URL.revokeObjectURL(blob.url);
+        setBlob({ data, url, ext });
+        setState("recorded");
+        // Release the mic.
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      };
+
+      setElapsed(0);
+      const start = performance.now();
+      tickRef.current = window.setInterval(() => {
+        setElapsed(Math.floor((performance.now() - start) / 1000));
+      }, 250);
+
+      rec.start();
+      setState("recording");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to start recording");
+    }
+  }
+
+  function stopRecording() {
+    if (tickRef.current !== null) {
+      window.clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+    recorderRef.current?.stop();
+  }
+
+  function discard() {
+    if (blob?.url) URL.revokeObjectURL(blob.url);
+    setBlob(null);
+    setComment("");
+    setElapsed(0);
+    setState("idle");
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!blob) return;
+    setState("submitting");
+    try {
+      const signedRes = await fetch("/api/capture/upload-signed-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "voice" }),
+      });
+      const signed = (await signedRes.json()) as
+        | { storage_path: string; token: string; bucket: string }
+        | { error: string };
+      if (!signedRes.ok || "error" in signed) {
+        toast.error(("error" in signed && signed.error) || "Failed to get upload URL");
+        setState("recorded");
+        return;
+      }
+
+      const supabase = getBrowserSupabase();
+      const upload = await supabase.storage
+        .from(signed.bucket)
+        .uploadToSignedUrl(signed.storage_path, signed.token, blob.data, {
+          contentType: blob.data.type || "audio/webm",
+        });
+      if (upload.error) {
+        toast.error(`Upload failed: ${upload.error.message}`);
+        setState("recorded");
+        return;
+      }
+
+      const res = await capture({
+        voiceStoragePath: signed.storage_path,
+        comment: comment.trim() || undefined,
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        setState("recorded");
+        return;
+      }
+
+      toast.success("Uploaded. Transcribing…");
+      discard();
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Network error");
+      setState("recorded");
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      <div className="border-border bg-muted/30 flex flex-col items-center gap-2 rounded-md border p-4 text-center">
+        {state === "idle" && (
+          <Button type="button" onClick={startRecording} variant="default">
+            <MicIcon className="size-4" />
+            Record
+          </Button>
+        )}
+        {state === "recording" && (
+          <>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="inline-block size-2 animate-pulse rounded-full bg-red-500" />
+              Recording — {formatDuration(elapsed)}
+            </div>
+            <Button type="button" onClick={stopRecording} variant="outline">
+              <SquareIcon className="size-3.5" />
+              Stop
+            </Button>
+          </>
+        )}
+        {state === "recorded" && blob && (
+          <div className="flex w-full flex-col gap-2">
+            <audio controls preload="metadata" src={blob.url} className="w-full" />
+            <div className="flex justify-end gap-2">
+              <Button type="button" onClick={discard} variant="ghost" size="sm">
+                Discard
+              </Button>
+            </div>
+          </div>
+        )}
+        {state === "submitting" && <p className="text-muted-foreground text-xs">Uploading…</p>}
+      </div>
+
+      <Input
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="Comment (optional)"
+        disabled={state === "submitting"}
+      />
+      <Button type="submit" disabled={!blob || state === "submitting"} className="self-end">
+        {state === "submitting" ? "Uploading…" : "Capture voice"}
+      </Button>
+    </form>
+  );
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }

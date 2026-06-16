@@ -2,16 +2,20 @@ import { notFound } from "next/navigation";
 
 import { AtomDetail } from "@/components/atom/atom-detail";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getServiceSupabase } from "@/lib/supabase/service";
 
 interface SourceRow {
   type: "paste" | "url" | "upload" | "voice" | "connector";
   original_url: string | null;
+  storage_path: string | null;
   extracted_title: string | null;
 }
 interface ChapterRow {
   id: string;
   name: string;
 }
+
+const AUDIO_URL_TTL_SEC = 6 * 60 * 60; // 6 hours
 
 export default async function AtomDetailPage({ params }: { params: Promise<{ atomId: string }> }) {
   const { atomId } = await params;
@@ -20,7 +24,7 @@ export default async function AtomDetailPage({ params }: { params: Promise<{ ato
   const { data, error } = await supabase
     .from("atoms")
     .select(
-      "id, content, capture_comment, captured_at, status, processing_error, sources!inner(type, original_url, extracted_title), chapters!primary_chapter_id(id, name)",
+      "id, content, capture_comment, captured_at, status, processing_error, sources!inner(type, original_url, storage_path, extracted_title), chapters!primary_chapter_id(id, name)",
     )
     .eq("id", atomId)
     .maybeSingle();
@@ -34,6 +38,18 @@ export default async function AtomDetailPage({ params }: { params: Promise<{ ato
     | ChapterRow
     | undefined;
 
+  // Voice atoms get a short-lived signed URL for the embedded player. We use
+  // the service-role client because the audio bucket is private; RLS already
+  // confirmed the user can see the atom before we get here.
+  let audio_url: string | null = null;
+  if (source?.type === "voice" && source.storage_path) {
+    const service = getServiceSupabase();
+    const { data: signed } = await service.storage
+      .from("voice")
+      .createSignedUrl(source.storage_path, AUDIO_URL_TTL_SEC);
+    audio_url = signed?.signedUrl ?? null;
+  }
+
   return (
     <AtomDetail
       id={data.id}
@@ -45,6 +61,7 @@ export default async function AtomDetailPage({ params }: { params: Promise<{ ato
       source_type={source?.type ?? "paste"}
       source_url={source?.original_url ?? null}
       source_title={source?.extracted_title ?? null}
+      audio_url={audio_url}
       chapter={chapter ? { id: chapter.id, name: chapter.name } : null}
     />
   );

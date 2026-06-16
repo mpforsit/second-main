@@ -28,6 +28,30 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 
 ---
 
+## Step 8 — Voice capture (2026-06-16)
+
+**Shipped**
+
+- [`supabase/migrations/0003_voice_storage.sql`](./supabase/migrations/0003_voice_storage.sql) — `voice` Storage bucket (25 MB cap, common audio MIME types), per-user folder RLS policies matching the `uploads` pattern.
+- [`lib/openai/whisper.ts`](./lib/openai/whisper.ts) `transcribeFromStorage(path, opts)` — service-role download, Whisper `whisper-1` with `verbose_json` to capture the audio duration, one `llm_call_logs` row written with `use_case='voice.transcribe'` and `cost_usd` derived from duration × $0.006/min.
+- [`lib/openai/pricing.ts`](./lib/openai/pricing.ts) — `WHISPER_USD_PER_MINUTE` constant + `computeWhisperCost(duration_sec)` helper.
+- [`inngest/functions/process-atom.ts`](./inngest/functions/process-atom.ts) — extract step now handles `source.type='voice'` via `transcribeFromStorage`. Same `save-content` step recomputes `content_hash` from the transcript so dedup is real.
+- [`<CaptureBox>`](./components/capture/capture-box.tsx) — Voice tab is live. Records via `MediaRecorder` with MIME negotiation (prefers `audio/webm;codecs=opus`, falls back to `audio/mp4` for Safari), shows live elapsed-time, in-place playback preview, discard / submit flow. Mic stream is stopped + URL objects revoked on stop / submit / unmount.
+- [`<AtomDetail>`](./components/atom/atom-detail.tsx) — voice atoms get an embedded HTML5 audio player above the transcript, fed by a 6-hour signed URL minted server-side in the page query.
+
+**Verified locally**
+
+- Recorded ~9 s of German speech → atom flipped to Ready → detail page shows the audio player at top and the transcript ("Test. Das ist eine Testaufnahme.") below.
+- `llm_call_logs` row written: `whisper-1`, $0.000876, latency 3.9 s.
+- Build / typecheck / lint clean.
+
+**Deviations from spec**
+
+- **Duration-based cost via `response_format: "verbose_json"`** — spec mentions logging duration directly. Whisper's `duration` field on the verbose response gives us the canonical value without a second audio-decode step on our side.
+- **Quota update on `quotas.voice_seconds_used`** is still deferred to Step 14 (consistent with how chunk/embed cost handling is split between logging and enforcement).
+
+---
+
 ## Step 7 — URL capture with extraction (2026-06-15)
 
 **Shipped**
