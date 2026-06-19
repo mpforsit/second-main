@@ -3,8 +3,9 @@
 import crypto from "node:crypto";
 
 import { inngest } from "@/lib/inngest/client";
+import { parseIntent } from "@/lib/prompts/intent-parse";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { CaptureInputSchema, type CaptureInput } from "@/types/schemas";
+import { CaptureInputSchema, type CaptureInput, type IntentAction } from "@/types/schemas";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -86,15 +87,38 @@ export async function capture(rawInput: unknown): Promise<Result<{ atom_id: stri
     return { ok: false, error: `atom_insert: ${atomErr?.message ?? "no row"}` };
   }
 
-  // 7. Intent row (optional)
+  // 7. Intent row (optional). If the user didn't pick an action_type, ask
+  //    Haiku to parse the free-text intent into a structured action +
+  //    optional due date (docs/05-llm-operations.md §5.4.5).
   if (input.intent) {
+    let action_type: IntentAction;
+    let intentText = input.intent.text;
+    let due_at: string | null = input.intent.due_at ?? null;
+
+    if (input.intent.action_type) {
+      action_type = input.intent.action_type;
+    } else {
+      try {
+        const parsed = await parseIntent(input.intent.text, {
+          user_id: user.id,
+          workspace_id: ws.id,
+        });
+        action_type = parsed.action_type;
+        intentText = parsed.normalized_text;
+        due_at = due_at ?? parsed.due_at;
+      } catch (err) {
+        console.error("[capture] intent_parse failed; falling back to 'other'", err);
+        action_type = "other";
+      }
+    }
+
     const { error: intErr } = await supabase.from("intents").insert({
       atom_id: atomRow.id,
       author_id: user.id,
       workspace_id: ws.id,
-      text: input.intent.text,
-      action_type: input.intent.action_type,
-      due_at: input.intent.due_at ?? null,
+      text: intentText,
+      action_type,
+      due_at,
     });
     if (intErr) console.error("[capture] intent insert failed", intErr);
   }

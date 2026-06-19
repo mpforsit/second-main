@@ -151,7 +151,7 @@ export const processAtom = inngest.createFunction(
 
       // 7. Classify into a chapter (Haiku → strict JSON, one retry)
       const classification = await step.run("classify", async () => {
-        const [{ data: um }, { data: chapters }] = await Promise.all([
+        const [{ data: um }, { data: chapters }, { data: intentRows }] = await Promise.all([
           supabase.from("user_models").select("model").eq("user_id", user_id).single(),
           supabase
             .from("chapters")
@@ -159,14 +159,27 @@ export const processAtom = inngest.createFunction(
             .eq("workspace_id", workspace_id)
             .is("archived_at", null)
             .order("sort_order"),
+          supabase
+            .from("intents")
+            .select("text, action_type")
+            .eq("atom_id", atom_id)
+            .order("created_at")
+            .limit(1),
         ]);
         const userModel = (um?.model ?? {}) as UserModel;
+        const firstIntent = intentRows?.[0];
+        const intentForPrompt = firstIntent
+          ? {
+              text: firstIntent.text as string,
+              action_type: firstIntent.action_type as string,
+            }
+          : null;
         const userPrompt = renderClassifyUserPrompt({
           user_model_serialized: serializeUserModel(userModel),
           existing_chapters: chapters ?? [],
           content,
           capture_comment: atom.capture_comment,
-          intent: null, // intents-on-classify lands in Step 9
+          intent: intentForPrompt,
         });
 
         let lastErr: Error | null = null;

@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  EMPTY_INTENT,
+  IntentInput,
+  serializeIntent,
+  type IntentDraft,
+} from "@/components/capture/intent-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -50,6 +56,7 @@ function TextCapture() {
   const router = useRouter();
   const [text, setText] = useState("");
   const [comment, setComment] = useState("");
+  const [intent, setIntent] = useState<IntentDraft>(EMPTY_INTENT);
   const [submitting, setSubmitting] = useState(false);
   const detectedUrl = isSingleUrl(text);
 
@@ -57,9 +64,13 @@ function TextCapture() {
     e.preventDefault();
     if (!text.trim() || submitting) return;
     setSubmitting(true);
+    const base = {
+      comment: comment.trim() || undefined,
+      intent: serializeIntent(intent),
+    };
     const payload = detectedUrl
-      ? { url: detectedUrl.toString(), comment: comment.trim() || undefined }
-      : { text: text.trim(), comment: comment.trim() || undefined };
+      ? { ...base, url: detectedUrl.toString() }
+      : { ...base, text: text.trim() };
     const res = await capture(payload);
     if (!res.ok) {
       toast.error(res.error);
@@ -69,6 +80,7 @@ function TextCapture() {
     toast.success(detectedUrl ? "Fetching article…" : "Captured. Processing…");
     setText("");
     setComment("");
+    setIntent(EMPTY_INTENT);
     setSubmitting(false);
     router.refresh();
   }
@@ -98,6 +110,7 @@ function TextCapture() {
         placeholder="Comment (optional)"
         disabled={submitting}
       />
+      <IntentInput value={intent} onChange={setIntent} disabled={submitting} />
       <Button type="submit" disabled={!text.trim() || submitting} className="self-end">
         {submitting ? "Capturing…" : detectedUrl ? "Fetch article" : "Capture"}
       </Button>
@@ -109,6 +122,7 @@ function UploadCapture() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [comment, setComment] = useState("");
+  const [intent, setIntent] = useState<IntentDraft>(EMPTY_INTENT);
   const [submitting, setSubmitting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -166,6 +180,7 @@ function UploadCapture() {
       const res = await capture({
         uploadStoragePath: signed.storage_path,
         comment: comment.trim() || undefined,
+        intent: serializeIntent(intent),
       });
       if (!res.ok) {
         toast.error(res.error);
@@ -176,6 +191,7 @@ function UploadCapture() {
       toast.success("Uploaded. Extracting…");
       setFile(null);
       setComment("");
+      setIntent(EMPTY_INTENT);
       router.refresh();
     } finally {
       setSubmitting(false);
@@ -222,6 +238,7 @@ function UploadCapture() {
         placeholder="Comment (optional)"
         disabled={submitting}
       />
+      <IntentInput value={intent} onChange={setIntent} disabled={submitting} />
       <Button type="submit" disabled={!file || submitting} className="self-end">
         {submitting ? "Uploading…" : "Capture PDF"}
       </Button>
@@ -249,6 +266,7 @@ function VoiceCapture() {
   const [elapsed, setElapsed] = useState(0);
   const [blob, setBlob] = useState<{ data: Blob; url: string; ext: "webm" | "mp4" } | null>(null);
   const [comment, setComment] = useState("");
+  const [intent, setIntent] = useState<IntentDraft>(EMPTY_INTENT);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const tickRef = useRef<number | null>(null);
@@ -318,6 +336,7 @@ function VoiceCapture() {
     if (blob?.url) URL.revokeObjectURL(blob.url);
     setBlob(null);
     setComment("");
+    setIntent(EMPTY_INTENT);
     setElapsed(0);
     setState("idle");
   }
@@ -356,6 +375,7 @@ function VoiceCapture() {
       const res = await capture({
         voiceStoragePath: signed.storage_path,
         comment: comment.trim() || undefined,
+        intent: serializeIntent(intent),
       });
       if (!res.ok) {
         toast.error(res.error);
@@ -412,6 +432,7 @@ function VoiceCapture() {
         placeholder="Comment (optional)"
         disabled={state === "submitting"}
       />
+      <IntentInput value={intent} onChange={setIntent} disabled={state === "submitting"} />
       <Button type="submit" disabled={!blob || state === "submitting"} className="self-end">
         {state === "submitting" ? "Uploading…" : "Capture voice"}
       </Button>

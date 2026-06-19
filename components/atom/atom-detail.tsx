@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowLeftIcon, ExternalLinkIcon } from "lucide-react";
 
+import { CommentsSection, type CommentItem } from "@/components/atom/comments-section";
+import { IntentsSection, type IntentItem } from "@/components/atom/intents-section";
 import { RetryButton } from "@/components/atom/retry-button";
 import { Button } from "@/components/ui/button";
 
@@ -16,6 +18,9 @@ interface Props {
   source_title: string | null;
   audio_url: string | null;
   chapter: { id: string; name: string } | null;
+  comments: CommentItem[];
+  intents: IntentItem[];
+  current_user_id: string;
 }
 
 const SOURCE_LABEL: Record<Props["source_type"], string> = {
@@ -113,8 +118,16 @@ export function AtomDetail(props: Props) {
         </section>
       )}
 
+      <IntentsSection intents={props.intents} />
+
+      <CommentsSection
+        atomId={props.id}
+        comments={props.comments}
+        currentUserId={props.current_user_id}
+      />
+
       <section className="text-muted-foreground rounded-md border border-dashed p-4 text-xs">
-        Comments, intents, and related atoms land in upcoming steps (9 and 12).
+        Related atoms (link suggestions) land in Step 12.
       </section>
     </main>
   );

@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { AtomDetail } from "@/components/atom/atom-detail";
 import { getServerSupabase } from "@/lib/supabase/server";
@@ -21,26 +21,41 @@ export default async function AtomDetailPage({ params }: { params: Promise<{ ato
   const { atomId } = await params;
 
   const supabase = await getServerSupabase();
-  const { data, error } = await supabase
-    .from("atoms")
-    .select(
-      "id, content, capture_comment, captured_at, status, processing_error, sources!inner(type, original_url, storage_path, extracted_title), chapters!primary_chapter_id(id, name)",
-    )
-    .eq("id", atomId)
-    .maybeSingle();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  if (error || !data) notFound();
+  const [{ data: atomRow, error: atomErr }, { data: commentRows }, { data: intentRows }] =
+    await Promise.all([
+      supabase
+        .from("atoms")
+        .select(
+          "id, content, capture_comment, captured_at, status, processing_error, sources!inner(type, original_url, storage_path, extracted_title), chapters!primary_chapter_id(id, name)",
+        )
+        .eq("id", atomId)
+        .maybeSingle(),
+      supabase
+        .from("comments")
+        .select("id, text, is_private, created_at, author_id")
+        .eq("atom_id", atomId)
+        .order("created_at"),
+      supabase
+        .from("intents")
+        .select("id, text, action_type, due_at, status")
+        .eq("atom_id", atomId)
+        .order("created_at"),
+    ]);
 
-  const source = (Array.isArray(data.sources) ? data.sources[0] : data.sources) as
+  if (atomErr || !atomRow) notFound();
+
+  const source = (Array.isArray(atomRow.sources) ? atomRow.sources[0] : atomRow.sources) as
     | SourceRow
     | undefined;
-  const chapter = (Array.isArray(data.chapters) ? data.chapters[0] : data.chapters) as
+  const chapter = (Array.isArray(atomRow.chapters) ? atomRow.chapters[0] : atomRow.chapters) as
     | ChapterRow
     | undefined;
 
-  // Voice atoms get a short-lived signed URL for the embedded player. We use
-  // the service-role client because the audio bucket is private; RLS already
-  // confirmed the user can see the atom before we get here.
   let audio_url: string | null = null;
   if (source?.type === "voice" && source.storage_path) {
     const service = getServiceSupabase();
@@ -52,17 +67,20 @@ export default async function AtomDetailPage({ params }: { params: Promise<{ ato
 
   return (
     <AtomDetail
-      id={data.id}
-      content={data.content}
-      capture_comment={data.capture_comment}
-      captured_at={data.captured_at}
-      status={data.status}
-      processing_error={data.processing_error}
+      id={atomRow.id}
+      content={atomRow.content}
+      capture_comment={atomRow.capture_comment}
+      captured_at={atomRow.captured_at}
+      status={atomRow.status}
+      processing_error={atomRow.processing_error}
       source_type={source?.type ?? "paste"}
       source_url={source?.original_url ?? null}
       source_title={source?.extracted_title ?? null}
       audio_url={audio_url}
       chapter={chapter ? { id: chapter.id, name: chapter.name } : null}
+      comments={commentRows ?? []}
+      intents={intentRows ?? []}
+      current_user_id={user.id}
     />
   );
 }

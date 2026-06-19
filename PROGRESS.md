@@ -28,6 +28,37 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 
 ---
 
+## Step 9 — Comments and intents (2026-06-19)
+
+**Shipped**
+
+- [`lib/prompts/intent-parse.ts`](./lib/prompts/intent-parse.ts) — verbatim §5.4.5 system prompt + a `parseIntent(text, opts)` helper that calls Haiku, parses the JSON, and validates against `IntentParseResultSchema`. Records a `capture.intent_parse` row in `llm_call_logs`.
+- [`types/schemas.ts`](./types/schemas.ts): `CaptureInputSchema.intent.action_type` is now optional (so the server can auto-parse), plus new `IntentParseResultSchema`, `IntentUpdateSchema`, `CommentInputSchema`.
+- [`server-actions/intents.ts`](./server-actions/intents.ts) — `addIntent`, `updateIntent`, `dismissIntent`, `deleteIntent`; all RLS-scoped via `author_id = auth.uid()`, each `revalidatePath('/atoms/[id]')` so the detail page refreshes.
+- [`server-actions/comments.ts`](./server-actions/comments.ts) — `addComment`, `updateComment`, `deleteComment` with the same pattern.
+- [`server-actions/atoms.ts`](./server-actions/atoms.ts) — `capture()` now auto-parses free-text intents (no `action_type` chosen) via `parseIntent`. Falls back to `action_type='other'` if the LLM call throws.
+- [`<IntentInput>`](./components/capture/intent-input.tsx) — collapsible "+ Add intent" → opens a panel with free-text field, action-type pill chooser (read / reach out / use in / research / review / share / decide / other), and a YYYY-MM-DD due-date input. `serializeIntent` accepts a pill or date with no text and falls back to the action label so a pill-only intent still saves.
+- All three `<CaptureBox>` tabs (Text, Upload, Voice) now include `<IntentInput>`.
+- [`<IntentsSection>`](./components/atom/intents-section.tsx) — strikethrough-on-close list with inline ✓ done / × dismiss / reopen / trash actions.
+- [`<CommentsSection>`](./components/atom/comments-section.tsx) — chronological list with edit-in-place + delete on the author's own rows, plus a composer at the bottom.
+- [`<AtomDetail>`](./components/atom/atom-detail.tsx) now renders both sections; the page query in [`atoms/[atomId]/page.tsx`](<./app/(app)/atoms/[atomId]/page.tsx>) fetches comments + intents in parallel with the atom + sources joins.
+- [`inngest/functions/process-atom.ts`](./inngest/functions/process-atom.ts) classify step now selects the first intent for the atom and feeds `{text, action_type}` into the classification prompt (was `null`).
+
+**Verified end-to-end**
+
+- Pill + due date (no free text) → intent saves with action label as text (`text="Reach out"`, `action_type=reach_out`, due preserved).
+- Free-text intent **"read before Thursday"** → Haiku call logged at $0.000561 (under spec's $0.0006 estimate), 966 ms, returned `action_type=read`, `due_at=2026-06-25T23:59:59Z` (next Thursday).
+- Comment composer appends a row with timestamp; edit + delete work on own rows; RLS prevents touching other authors'.
+- Intent status toggle to done / dismissed / reopen persists; refresh confirms.
+- Build / typecheck / lint clean.
+
+**Deviations from spec**
+
+- **Pill-only intent fallback.** Spec leaves UX silent on "what happens if user picks a pill + date but never types text". My initial implementation dropped the intent silently — fixed by having `serializeIntent` fall back to the pill label as the row text (e.g. `text="Read"`). User can edit later from `<IntentsSection>` once we add an "edit text" affordance there (small follow-up — for now the row text is editable through a future server action).
+- **Inline comment edit / intent text edit** — comments get full edit-in-place; intent text editing isn't yet wired into `<IntentsSection>` (status / due / delete are). Server action `updateIntent` already supports it; the UI button just isn't present.
+
+---
+
 ## Step 8 — Voice capture (2026-06-16)
 
 **Shipped**
