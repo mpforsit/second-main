@@ -1,4 +1,4 @@
-import { LogOutIcon } from "lucide-react";
+import { LogOutIcon, SearchIcon } from "lucide-react";
 import Link from "next/link";
 
 import { NewChapterDialog } from "@/components/chapter/new-chapter-dialog";
@@ -27,6 +27,17 @@ export async function Sidebar() {
       </Link>
 
       <div className="mt-6 flex flex-1 flex-col gap-4 overflow-y-auto">
+        <Link
+          href="/search"
+          className="hover:bg-muted text-muted-foreground flex items-center justify-between rounded-md px-2 py-1.5 text-sm"
+        >
+          <span className="flex items-center gap-2">
+            <SearchIcon className="size-3.5" />
+            Search
+          </span>
+          <kbd className="bg-muted-foreground/10 rounded px-1 py-0.5 text-[10px]">⌘K</kbd>
+        </Link>
+
         <section>
           <div className="text-muted-foreground mb-1 flex items-center justify-between px-2">
             <Link
@@ -61,7 +72,6 @@ export async function Sidebar() {
           </p>
           <ul className="text-muted-foreground flex flex-col text-sm">
             <li className="px-2 py-1.5">Ask</li>
-            <li className="px-2 py-1.5">Search</li>
             <li className="px-2 py-1.5">User model</li>
             <li className="px-2 py-1.5">Settings</li>
           </ul>

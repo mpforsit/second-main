@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { SearchPalette } from "@/components/search/search-palette";
 import { Sidebar } from "@/components/shared/sidebar";
 import { getServerSupabase } from "@/lib/supabase/server";
 
@@ -27,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-svh flex-1">
       <Sidebar />
       {children}
+      <SearchPalette />
     </div>
   );
 }

@@ -28,6 +28,38 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 
 ---
 
+## Step 10 — Hybrid search (2026-06-25)
+
+**Shipped**
+
+- [`lib/retrieval/search.ts`](./lib/retrieval/search.ts) `searchAtoms(workspace_id, user_id, query, limit)` — embeds the query (logs a `use_case='embed.query'` row), calls the `search_chunks` RPC that landed in Step 2, keeps the best-scoring chunk per atom, then loads atom metadata + chapter via PostgREST.
+- [`lib/text/highlight.ts`](./lib/text/highlight.ts) — `highlightSegments` splits a string into `{text, match}` pairs against the query terms (with stop-word filtering); `snippetAround` returns a ~280-char window centred on the first match so we don't show the opening line every time.
+- [`/api/search?q=...`](./app/api/search/route.ts) — GET endpoint for the Cmd+K palette; returns up to 8 results as `{atom_id, title, snippet, chapter_name}`.
+- [`/search`](<./app/(app)/(with-rail)/search/page.tsx>) — server-rendered, driven by `?q=` (URL state, no client-side store). Reuses `<AtomCard>` with a pre-rendered highlighted snippet via a new optional `snippet` prop.
+- [`<SearchForm>`](./components/search/search-form.tsx) — client form that pushes `/search?q=…`. Uses `useTransition` so the button correctly tracks the navigation rather than getting stuck in a "pending" state.
+- [`<SearchPalette>`](./components/search/search-palette.tsx) — global Cmd/Ctrl+K modal. Debounced fetch (250 ms), arrow-key + Enter navigation, mouse-hover highlight, "Open full search page" fallback when the palette comes up empty. Mounted globally in [`app/(app)/layout.tsx`](<./app/(app)/layout.tsx>). Includes a screen-reader `<DialogTitle>` so the Radix Dialog a11y warning is silenced.
+- Sidebar promoted **Search** from "Coming soon" to a real entry with a `⌘K` kbd hint.
+
+**Verified end-to-end**
+
+- Literal hit ("Vytal") → atom returned with highlighted matches.
+- Semantic hit ("phone conversation" → an atom about a call) → vector branch surfaces the atom even with no FTS match.
+- Truly unrelated query ("Giraffe") → zero results after the relevance floor.
+- Cmd+K palette opens anywhere, debounces, ↑/↓/Enter navigate, Esc closes.
+- 10 `embed.query` log rows recorded with sub-token costs (rounding to $0 in numeric(10,6)).
+- Build / typecheck / lint clean.
+
+**Deviations from spec**
+
+- **Application-layer relevance floor** added to `searchAtoms`: `fts_score > 0 OR vector_score >= 0.3`. The RPC always returns the top-K nearest vector hits regardless of how distant they actually are, which produces ghost results on small corpora ("Giraffe" → top 5 random chunks). The 0.3 cutoff empirically separates "vaguely related" from "truly off-topic" for `text-embedding-3-small`.
+
+**Open items**
+
+- The floor is a single magic number per workspace. Once corpora grow past a few hundred atoms we'll want to tune it (or migrate to a per-chunk LLM re-rank for Q&A in Step 11).
+- The palette doesn't yet show chapter / page navigation results (only atoms). Easy follow-up if the muscle memory is "Cmd+K for everything".
+
+---
+
 ## Step 9 — Comments and intents (2026-06-19)
 
 **Shipped**

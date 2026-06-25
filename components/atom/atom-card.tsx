@@ -8,6 +8,8 @@ interface Props {
   capture_comment: string | null;
   chapter_name: string | null;
   captured_at: string;
+  /** Optional pre-rendered snippet (e.g. with highlight marks for search). */
+  snippet?: React.ReactNode;
 }
 
 const SOURCE_ICON: Record<Props["source_type"], string> = {
@@ -20,7 +22,7 @@ const SOURCE_ICON: Record<Props["source_type"], string> = {
 
 export function AtomCard(props: Props) {
   const title = deriveTitle(props);
-  const snippet = oneLineSnippet(props.content, title);
+  const snippet = props.snippet ?? oneLineSnippet(props.content, title);
 
   return (
     <Link
