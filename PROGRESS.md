@@ -28,6 +28,29 @@ Chronological build log for [`docs/07-phase-1-buildplan.md`](./docs/07-phase-1-b
 
 ---
 
+## Step 11 — Q&A mode (2026-06-29)
+
+**Shipped**
+
+- [`lib/prompts/qa.ts`](./lib/prompts/qa.ts) — §5.4.4 system prompt verbatim, `renderQaUserPrompt(question, userModel, atoms)` building the spec's `<user_model>` / `<retrieved_atoms>` / `<question>` blocks. `serializeUserModel` is shared with the classifier.
+- [`app/api/ask/route.ts`](./app/api/ask/route.ts) — POST SSE handler. Auths, gets workspace, runs `searchAtoms` (top 20 → top 8), emits a `context` event with candidate atom titles up front so the client can render citation pills with real titles as tokens stream, then `token` events from `callClaudeStream`, then `done`. Errors come back as `error` events.
+- [`<AskInterface>`](./components/ask/ask-interface.tsx) — large textarea, ⌘+Enter to send, streams tokens, replaces inline `[atom:UUID]` markers with clickable title pills, lists deduplicated cited atoms below the answer, and a "Recent questions" list persisted in `localStorage` (last 10, click to re-run).
+- [`/ask`](<./app/(app)/(with-rail)/ask/page.tsx>) page wrapper.
+- Sidebar — "Ask" promoted from "Coming soon" to a real entry above Search.
+
+**Verified locally**
+
+- Two Sonnet 4.6 calls landed in `llm_call_logs` (`qa.synthesize`): 331/75 tokens @ $0.002118 (3.2 s) and 590/269 tokens @ $0.005805 (6.6 s). Both well under the spec's ~$0.02 estimate per question.
+- Build / typecheck / lint clean.
+
+**Deviations from spec**
+
+- **`context` event upfront** instead of a per-token `citation` event. The spec lists three event types: `token`, `citation`, `done`. We collapsed citation handling into a single up-front `context` event carrying the candidate atoms' metadata. The client then parses `[atom:UUID]` tokens out of the streamed text and looks up titles in the context map — same UX, fewer SSE frames.
+- **Recent questions in localStorage, not a `qa_history` table.** Spec §5 build plan explicitly says "MVP just keeps the last 10 in localStorage on the client, plus a qa_history table is optional — skip for MVP". Done.
+- **No quota check** in the route handler — defers to Step 14, consistent with the rest of the pipeline.
+
+---
+
 ## Step 10 — Hybrid search (2026-06-25)
 
 **Shipped**
